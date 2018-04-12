@@ -1,10 +1,9 @@
 ---
 title: 'Data Cleaning Tutorial: Nearly Unique'
 author: "OpenSDP"
-date: "May 11, 2017"
+date: "April 12, 2018"
 output: html_notebook
 ---
-
 
 ```{r environmentSetup, echo=FALSE, error=FALSE, message=FALSE, warning=FALSE, comment=NA}
 # Set options for R code output
@@ -14,114 +13,60 @@ knitr::opts_chunk$set(comment=NA, message=FALSE, echo=TRUE,
 # Set R output width to render nicely
 options(width=80)
 ```
-
 # Data Cleaning Tutorial: "Nearly Unique"
-
-In this tutorial you will take a data file that is "nearly unique" at
-the student and year level, clean the variables in the file to make them internally 
-consistent, and then drop the resulting duplicate records. The goal is to end up with
-exactly one record per student and year. Making the data unique by student and year will 
-make the data easier to analyze, and it will make it easier to combine the data with 
-other student files.
-
-Editing longitudinal data to make it consistent is a common data cleaning chore. To 
-do this you will need to choose and apply decision rules. For example, when one student 
-has two records in the same year, one with a free lunch indicator set to "Yes" and one 
-with a free lunch indicator set to "No," which record should you keep? What if someone's 
-gender changes over time? With tens of thousands of student records, you won't be able to 
-investigate each case individually. 
-
-Instead, it's usually better to make a sensible 
-decision rule, apply it to your data, and move on. If you are planning to use your data to 
-research overall patterns and trends, making small changes during data cleaning most 
-likely won't affect your results. If you do need to make more than a trivial number of 
-changes to make your data consistent, you should investigate what might be causing  
-data quality problems.
-
-This tutorial assumes that you have only a very basic knowledge of R. Here are 
-some of the commands you will need that might not be familiar to you: 
-
+In this tutorial you will take a data file that is "nearly unique" at the student and year level, clean the variables in the file to make them internally consistent, and then drop the resulting duplicate records. The goal is to end up with exactly one record per student and year. Making the data unique by student and year will make the data easier to analyze, and it will make it easier to combine the data with other student files.
+Editing longitudinal data to make it consistent is a common data cleaning chore. To do this you will need to choose and apply decision rules. For example, when one student has two records in the same year, one with a free lunch indicator set to "Yes" and one with a free lunch indicator set to "No," which record should you keep? What if someone's gender changes over time? With tens of thousands of student records, you won't be able to investigate each case individually.
+Instead, it's usually better to make a sensible decision rule, apply it to your data, and move on. If you are planning to use your data to research overall patterns and trends, making small changes during data cleaning most likely won't affect your results. If you do need to make more than a trivial number of changes to make your data consistent, you should investigate what might be causing data quality problems.
+This tutorial assumes that you have only a very basic knowledge of R. Here are some of the commands you will need that might not be familiar to you:
 - `str`
 - `glimpse`
 - `is.duplicated`
 - `apply`
 - `n_distinct`
 - `table`
-
-One final note: this tutorial is interactive. You will type commands into the 
-fields inside. However, when you are cleaning your own 
-data, you should store your data cleaning commands in an R script or an R Markdown 
-file. This will let you replicate your work and document your decision rules.
-
+One final note: this tutorial is interactive. You will type commands into the fields inside. However, when you are cleaning your own data, you should store your data cleaning commands in an R script or an R Markdown file. This will let you replicate your work and document your decision rules.
 ## Finding Your Way Around
-
-Data cleaning in R is best completed using tools provided by the add-on packages 
-known as the `tidyverse`. You can install these packages using the 
-command `install.packages("tidyverse")`. To load packages you have already 
-installed in R, use the `library()` command. 
-
+Data cleaning in R is best completed using tools provided by the add-on packages known as the `tidyverse`. You can install these packages using the command `install.packages("tidyverse")`. To load packages you have already installed in R, use the `library()` command.
 Load the tidyverse:
-
 
 ```{r loadpackages}
 library(tidyverse); library(magrittr)
 ```
 
-To learn about functions, you can use the `?` command to bring up the 
-help file. To learn about `apply`, simply type `?apply` into the console. Try 
-it now:
+To learn about functions, you can use the `?` command to bring up the help file. To learn about `apply`, simply type `?apply` into the console. Try it now:
+```{r}
+?apply
+```
 
 ## Loading Data and Checking It
-
-For this project, we will load our sample data from the `data` folder. You 
-can load the data with the following command:
-
-
+For this project, we will load our sample data from the `data` folder. You can load the data with the following command:
 ```{r loadData}
 load("data/cleaningPuzzle.rda")
 ```
 
 # Problem Statement
-
-When bringing together an analysis file an important skill is being able to 
-identify the uniqueness of the file and, when necessary, use business rules to 
-achieve the desired level of uniqueness.
-
+When bringing together an analysis file an important skill is being able to identify the uniqueness of the file and, when necessary, use business rules to achieve the desired level of uniqueness.
 To do this, let's get an overview of our data file:
-
 ```{r}
 glimpse(stu_dat)
 ```
 
-Here the variable names are straightforward. A good guess is that this dataset
-could be unique by `sid` or by `sid` and `school_year`. 
-
-Use the `n_distinct` command to investigate this. When `n_distinct` equals 
-`nrow(stu_dat)`, then we have identified the unique variable. 
-
+Here the variable names are straightforward. A good guess is that this dataset could be unique by `sid` or by `sid` and `school_year`.
+Use the `n_distinct` command to investigate this. When `n_distinct` equals `nrow(stu_dat)`, then we have identified the unique variable.
 ```{r}
 n_distinct(stu_dat$sid)
+nrow(stu_dat)
 ```
 
-Not unique by student ID. Let's create a student/school_year ID using paste and 
-test that:
-
+Not unique by student ID. Let's create a student/school_year ID and test that:
 ```{r}
 n_distinct(stu_dat$sid, stu_dat$school_year)
 n_distinct(stu_dat$sid, stu_dat$school_year) == nrow(stu_dat)
 ```
 
-The closest we have come is `sid` + `school_year` but some of the other variables 
-in the data are not unique by these. We need to investigate each variable and 
-correct any within-year variance. 
-
+The closest we have come is `sid` + `school_year` but some of the other variables in the data are not unique by these. We need to investigate each variable and correct any within-year variance.
 ## Investigate Invariance
-
-Let's take the variables in order. The first two, `male` and `race_ethnicity`, 
-can be defined as time-invariant (that is, should be consistent by `sid` for all 
-years). Defining them this way is a business rule.
-
-
+Let's take the variables in order. The first two, `male` and `race_ethnicity`, can be defined as time-invariant (that is, should be consistent by `sid` for all years). Defining them this way is a business rule.
 ```{r}
 # Example for male
 stu_dat %>% group_by(sid) %>% 
@@ -129,9 +74,7 @@ stu_dat %>% group_by(sid) %>%
   with(., table(count_male)) %>% print
 ```
 
-We see some students have two distinct values of male. For the purposes of this 
-analysis we will assume that student sex must be time invariant. 
-
+We see some students have two distinct values of male. For the purposes of this analysis we will assume that student sex must be time invariant.
 ```{r}
 table(stu_dat$race_ethnicity)
 stu_dat %>% group_by(sid) %>% 
@@ -139,24 +82,17 @@ stu_dat %>% group_by(sid) %>%
   with(., table(count_race)) %>% print
 ```
 
-We find students with multiple `race_ethnicity` values as well. 
-
+We find students with multiple `race_ethnicity` values as well.
 Next we have to decide how to make these consistent within `sid`:
-
 ```{r}
 stu_dat %<>% group_by(sid) %>% 
   mutate(nvals_male = n_distinct(male)) %>% 
   ungroup %>% as.data.frame
-
 table(stu_dat$nvals_male)
 print(stu_dat[stu_dat$nvals_male > 1, c("sid", "male", "school_year")])
-
 ```
 
-We have four students with multiple values of male. We will assign students to 
-the modal value where a mode exists and for the last student with two different 
-values, we will assign the most recent value:
-
+We have four students with multiple values of male. We will assign students to the modal value where a mode exists and for the last student with two different values, we will assign the most recent value:
 ```{r}
 # R has no default function to identify a mode
 # Here is a short function to do this
@@ -168,37 +104,27 @@ statamode <- function(x) {
   }
   return(".")
 }
-
 # Find modal male
-
 stu_dat %<>% group_by(sid) %>% 
   mutate(mode_male = statamode(male)) %>%
   ungroup %>% as.data.frame
-
 table(stu_dat$mode_male)
 # Find last value of male
-
 stu_dat %<>% group_by(sid) %>% 
   arrange(sid, school_year) %>%
   mutate(last_male = last(male)) %>%
   ungroup %>% as.data.frame
-
 # Do replacement
-
 stu_dat$male2 <- NA
 stu_dat$male2[stu_dat$mode_male == "."] <- stu_dat$last_male[stu_dat$mode_male == "."]
 stu_dat$male2[stu_dat$mode_male != "."] <- stu_dat$mode_male[stu_dat$mode_male != "."]
-
 # Check
 stu_dat %>% group_by(sid) %>% 
   summarize(count_male2 = n_distinct(male2)) %>% 
   with(., table(count_male2)) %>% print
-
 ```
 
-
 Looks good. Now let's cleanup the intermediate variables:
-
 ```{r}
 stu_dat$male <- stu_dat$male2
 stu_dat$male2 <- NULL
@@ -208,36 +134,27 @@ stu_dat$last_male <- NULL
 ```
 
 Let's repeat the same procedure for race:
-
-
 ```{r}
 # Find modal race
 stu_dat %<>% group_by(sid) %>% 
   mutate(mode_race = statamode(race_ethnicity)) %>%
   ungroup %>% as.data.frame
-
 # Find last value of male
-
 stu_dat %<>% group_by(sid) %>% 
   arrange(sid, school_year) %>%
   mutate(last_race = last(race_ethnicity)) %>%
   ungroup %>% as.data.frame
-
 # Do replacement
-
 stu_dat$race2 <- NA
 stu_dat$race2[stu_dat$mode_race == "."] <- stu_dat$last_race[stu_dat$mode_race == "."]
 stu_dat$race2[stu_dat$mode_race != "."] <- stu_dat$mode_race[stu_dat$mode_race != "."]
-
 # Check
 stu_dat %>% group_by(sid) %>% 
   summarize(count_race2 = n_distinct(race2)) %>% 
   with(., table(count_race2)) %>% print
-
 ```
 
 Looks good. Now let's cleanup the intermediate variables:
-
 ```{r}
 stu_dat$race_ethnicity <- stu_dat$race2
 stu_dat$race2 <- NULL
@@ -246,11 +163,8 @@ stu_dat$nvals_race <- NULL
 stu_dat$last_race <- NULL
 ```
 
-
 ## Student-Year Invariance
-
 First, let's see how often a student has multiple of the same year of data:
-
 ```{r}
 stu_dat %>% group_by(sid, school_year) %>% 
   summarize(rows = n()) %>% as.data.frame %>% 
@@ -258,61 +172,42 @@ stu_dat %>% group_by(sid, school_year) %>%
  
 ```
 
-So we need a strategy to make `frpl`, `iep`, `ell`, and `gifted` consistent for 
-records with multiple `sid` + `school_year` values. 
-
+So we need a strategy to make `frpl`, `iep`, `ell`, and `gifted` consistent for records with multiple `sid` + `school_year` values.
 ```{r}
 zed <- stu_dat %>% group_by(sid, school_year) %>% 
   summarize(nvals_frpl = n_distinct(frpl), 
             nvals_iep = n_distinct(iep), 
             nvals_ell = n_distinct(ell), 
             nvals_gifted = n_distinct(gifted))
-
 table(zed$nvals_frpl)
 table(zed$nvals_iep)
 table(zed$nvals_ell)
 table(zed$nvals_gifted)
 ```
 
-We see that `gifted` is consistent. We also see that mode is not a strong strategy 
-because only the majority of `sid` + `school_year` combinations are only duplicated 
-once. 
-
-Let's look at a couple individual cases:
-
+We see that `gifted` is consistent. We also see that mode is not a strong strategy because only the majority of `sid` + `school_year` combinations are only duplicated once.
+Let's look at a couple of individual cases:
 ```{r}
 # FRPL
 stu_dat[stu_dat$sid == 80, ]
-
 # IEP
 stu_dat[stu_dat$sid == 129, ]
 stu_dat[stu_dat$sid == 151, ]
-
 # ELL
 stu_dat[stu_dat$sid == 177, ]
-
 rm(zed); gc()
-
 ```
 
 A proposed decision rule might be:
-
 - If a mode exists within the `sid` + `school_year`, assign that
 - If no mode exists, assign to the value in the previous school year
-- If no previous school year exists, assign to the value of the following school 
-year
-- Finally if no other option exists, assign the student to the least common 
-category
-
-Other decision rules are possible. This will be dependent on your experience with 
-the data, historical information about how it was collected, the goal of the analysis, 
-and the existing business rules in the agency. 
-
+- If no previous school year exists, assign to the value of the following school year
+- Finally if no other option exists, assign the student to the least common category
+Other decision rules are possible. This will be dependent on your experience with the data, historical information about how it was collected, the goal of the analysis, and the existing business rules in the agency.
 ```{r}
 # Make FRPL numeric to allow numeric sorting
 stu_dat$frpl <- ifelse(stu_dat$frpl == "F", 2, 
                    ifelse(stu_dat$frpl == "R", 1, 0))
-
 stu_dat %<>% group_by(sid, school_year) %>% 
   mutate(nvals_frpl = n_distinct(frpl), 
          nvals_iep = n_distinct(iep), 
@@ -323,11 +218,9 @@ stu_dat %<>% group_by(sid, school_year) %>%
          max_frpl = max(frpl), 
          max_iep = max(iep), 
          max_ell = max(ell))
-
 table(stu_dat$mode_frpl)
 table(stu_dat$mode_iep)
 table(stu_dat$mode_ell)
-
 stu_dat %<>% group_by(sid) %>% 
   arrange(sid, school_year) %>%
   mutate(lag_frpl = lag(frpl), 
@@ -343,23 +236,17 @@ stu_dat %<>% group_by(sid) %>%
          lead_frpl = last(lead_frpl), 
          lead_iep = last(lead_iep), 
          lead_ell = last(lead_ell))
-
 stu_dat[stu_dat$sid==80, c("sid", "school_year", "frpl", "lag_frpl", "mode_frpl", 
                    "lead_frpl")]
 
-
 stu_dat[stu_dat$sid==151, c("sid", "school_year", "iep", "lag_iep", "mode_iep", 
                    "lead_iep")]
-
-
 ```
 
 Do the replacement for FRPL:
-
 ```{r}
 # Check pre-replacement distribution
 table(stu_dat$frpl)
-
 # Replace with mode
 stu_dat$frpl[stu_dat$nvals_frpl > 1] <- stu_dat$mode_frpl[stu_dat$nvals_frpl > 1]
 # Where mode is missing, use lag
@@ -369,34 +256,27 @@ stu_dat$frpl[stu_dat$frpl == "." | is.na(stu_dat$frpl)] <-
   stu_dat$lead_frpl[stu_dat$frpl == "." | is.na(stu_dat$frpl)]
 # Where lead and lag are missing, use maximum
 stu_dat$frpl[is.na(stu_dat$frpl)] <- stu_dat$max_frpl[is.na(stu_dat$frpl)]
-
 table(stu_dat$frpl)
 table(is.na(stu_dat$frpl))
 # stu_dat[is.na(stu_dat$frpl),]
-
 stu_dat %>% group_by(sid, school_year) %>% 
   summarize(nvals_frpl = n_distinct(frpl)) %>%
   as.data.frame %>% with(., table(nvals_frpl))
-
 ```
 
 Cleanup:
-
 ```{r}
 stu_dat$nvals_frpl <- NULL
 stu_dat$mode_frpl <- NULL
 stu_dat$lead_frpl <- NULL
 stu_dat$lag_frpl <- NULL
 stu_dat$max_frpl <- NULL
-
 ```
 
 Now repeat for ELL and IEP
-
 ```{r}
 # Check pre-replacement distribution
 table(stu_dat$ell)
-
 # Replace with mode
 stu_dat$ell[stu_dat$nvals_ell > 1] <- stu_dat$mode_ell[stu_dat$nvals_ell > 1]
 # Where mode is missing, use lag
@@ -406,18 +286,15 @@ stu_dat$ell[stu_dat$ell == "." | is.na(stu_dat$ell)] <-
   stu_dat$lead_ell[stu_dat$ell == "." | is.na(stu_dat$ell)]
 # Where lead and lag are missing, use maximum
 stu_dat$ell[is.na(stu_dat$ell)] <- stu_dat$max_ell[is.na(stu_dat$ell)]
-
 table(stu_dat$ell)
 table(is.na(stu_dat$ell))
 # stu_dat[is.na(stu_dat$frpl),]
-
 stu_dat %>% group_by(sid, school_year) %>% 
   summarize(nvals_ell = n_distinct(ell)) %>%
   as.data.frame %>% with(., table(nvals_ell))
 ```
 
 Cleanup:
-
 ```{r}
 stu_dat$nvals_ell <- NULL
 stu_dat$mode_ell <- NULL
@@ -427,11 +304,9 @@ stu_dat$max_ell <- NULL
 ```
 
 And for IEP
-
 ```{r}
 # Check pre-replacement distribution
 table(stu_dat$iep)
-
 # Replace with mode
 stu_dat$iep[stu_dat$nvals_iep > 1] <- stu_dat$mode_iep[stu_dat$nvals_iep > 1]
 # Where mode is missing, use lag
@@ -441,18 +316,15 @@ stu_dat$iep[stu_dat$iep == "." | is.na(stu_dat$iep)] <-
   stu_dat$lead_iep[stu_dat$iep == "." | is.na(stu_dat$iep)]
 # Where lead and lag are missing, use maximum
 stu_dat$iep[is.na(stu_dat$iep)] <- stu_dat$max_iep[is.na(stu_dat$iep)]
-
 table(stu_dat$iep)
 table(is.na(stu_dat$iep))
 # stu_dat[is.na(stu_dat$frpl),]
-
 stu_dat %>% group_by(sid, school_year) %>% 
   summarize(nvals_iep = n_distinct(iep)) %>%
   as.data.frame %>% with(., table(nvals_iep))
 ```
 
 Cleanup:
-
 ```{r}
 stu_dat$nvals_iep <- NULL
 stu_dat$mode_iep <- NULL
@@ -461,18 +333,13 @@ stu_dat$lag_iep <- NULL
 stu_dat$max_iep <- NULL
 ```
 
-
 ## Collapse
-
 ```{r}
 zed <- stu_dat %>% ungroup %>% distinct()
 nrow(zed) == n_distinct(paste0(zed$sid, zed$school_year))
-
 ```
 
 ## Session Info
-
 ```{r}
 print(sessionInfo(), locale=FALSE)
 ```
-
